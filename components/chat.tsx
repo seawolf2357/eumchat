@@ -2,11 +2,10 @@
 
 import { useEffect, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
-import { ChatPanel } from './chat-panel'
-import { ChatMessages } from './chat-messages'
+import ChatPanel from '@/components/chat-panel'
+import { ChatMessages } from '@/components/chat-messages'
 import { useUIState } from 'ai/rsc'
 import type { AI } from '@/app/actions'
-import type { UIState } from '@/lib/types'
 
 type ChatProps = {
   id?: string
