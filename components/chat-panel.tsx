@@ -54,6 +54,14 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
     }, 300)
   }
 
+  const handleClear = useCallback(() => {
+    setIsGenerating(false)
+    setMessages([])
+    setAIMessage({ messages: [], chatId: '' })
+    setInput('')
+    router.push('/')
+  }, [setIsGenerating, setMessages, setAIMessage, router])
+
   const handleQuerySubmit = useCallback(async (query: string, formData?: FormData) => {
     setInput(query)
     setIsGenerating(true)
@@ -82,7 +90,7 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
       toast.error(`Error: ${error}`)
       handleClear()
     }
-  }, [selectedModelId, setMessages, setIsGenerating, submit])
+  }, [selectedModelId, setMessages, setIsGenerating, submit, handleClear])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -103,14 +111,6 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
       setIsGenerating(false)
     }
   }, [aiMessage, setIsGenerating])
-
-  const handleClear = useCallback(() => {
-    setIsGenerating(false)
-    setMessages([])
-    setAIMessage({ messages: [], chatId: '' })
-    setInput('')
-    router.push('/')
-  }, [setIsGenerating, setMessages, setAIMessage, router])
 
   useEffect(() => {
     inputRef.current?.focus()
