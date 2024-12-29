@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { AI } from '@/app/actions'
 import { useUIState, useActions, useAIState } from 'ai/rsc'
@@ -54,7 +54,7 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
     }, 300)
   }
 
-  async function handleQuerySubmit(query: string, formData?: FormData) {
+  const handleQuerySubmit = useCallback(async (query: string, formData?: FormData) => {
     setInput(query)
     setIsGenerating(true)
 
@@ -82,7 +82,7 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
       toast.error(`Error: ${error}`)
       handleClear()
     }
-  }
+  }, [selectedModelId, setMessages, setIsGenerating, submit])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -95,7 +95,7 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
       handleQuerySubmit(query)
       isFirstRender.current = false
     }
-  }, [query])
+  }, [query, handleQuerySubmit])
 
   useEffect(() => {
     const lastMessage = aiMessage.messages.slice(-1)[0]
@@ -104,13 +104,13 @@ const ChatPanel = ({ messages, query, onModelChange }: ChatPanelProps) => {
     }
   }, [aiMessage, setIsGenerating])
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setIsGenerating(false)
     setMessages([])
     setAIMessage({ messages: [], chatId: '' })
     setInput('')
     router.push('/')
-  }
+  }, [setIsGenerating, setMessages, setAIMessage, router])
 
   useEffect(() => {
     inputRef.current?.focus()
