@@ -1,3 +1,5 @@
+// lib/types/index.ts
+
 export type SearchResults = {
   images: SearchResultImage[]
   results: SearchResultItem[]
@@ -5,8 +7,6 @@ export type SearchResults = {
   query: string
 }
 
-// If enabled the include_images_description is true, the images will be an array of { url: string, description: string }
-// Otherwise, the images will be an array of strings
 export type SearchResultImage =
   | string
   | {
@@ -63,6 +63,7 @@ export interface Chat extends Record<string, any> {
   path: string
   messages: AIMessage[]
   sharePath?: string
+  isSharePage?: boolean
 }
 
 export type AIMessage = {
@@ -104,4 +105,20 @@ export type SearXNGSearchResults = {
   results: SearchResultItem[]
   number_of_results?: number
   query: string
+}
+
+// 새로 추가된 타입들
+export type UIStateMessage = {
+  id: string
+  component: React.ReactNode
+  isGenerating?: boolean
+  isCollapsed?: boolean
+}
+
+export type UIState = UIStateMessage[]
+
+export type AIState = {
+  messages: AIMessage[]
+  chatId: string
+  isSharePage?: boolean
 }
