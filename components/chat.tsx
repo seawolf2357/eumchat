@@ -29,7 +29,6 @@ export function Chat({ id, query }: ChatProps) {
   const handleSubmit = useCallback(async (message: string) => {
     try {
       // 메시지 전송 로직 구현
-      // 예: API 호출 또는 상태 업데이트
       console.log('Submitting message:', message)
     } catch (error) {
       console.error('Failed to submit message:', error)
@@ -51,7 +50,6 @@ export function Chat({ id, query }: ChatProps) {
           <ChatPanel 
             messages={messages} 
             query={query}
-            onSubmit={handleSubmit}
           />
         </div>
       )}
