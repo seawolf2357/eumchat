@@ -1,9 +1,10 @@
 'use client'
 
 import { StreamableValue } from 'ai/rsc'
-import { UIState } from '@/lib/types' // app/actions 대신 lib/types에서 import
+import type { UIState } from '@/lib/types'
 import { CollapsibleMessage } from './collapsible-message'
 import { useCallback, useMemo } from 'react'
+import { createStreamableValue } from 'ai/rsc'
 
 interface ChatMessagesProps {
   messages: UIState
@@ -12,91 +13,55 @@ interface ChatMessagesProps {
 type GroupedMessage = {
   id: string
   components: React.ReactNode[]
-  isCollapsed?: StreamableValue<boolean> | undefined
+  isCollapsed?: StreamableValue<boolean>
 }
 
 export function ChatMessages({ messages }: ChatMessagesProps) {
-
-
-  // Hooks를 최상단에 배치
-  const groupedMessagesArray = useMemo(() => {
-    if (!messages?.length) {
-      return []
-    }
-
-    try {
-      const grouped = messages.reduce<{ [key: string]: GroupedMessage }>(
-        (acc, message) => {
-          if (!message?.id) return acc
-
-          if (!acc[message.id]) {
-            acc[message.id] = {
-              id: message.id,
-              components: [],
-              isCollapsed: message.isCollapsed
-            }
-          }
-
-          if (message.component) {
-            acc[message.id].components.push(message.component)
-          }
-
-          return acc
-        },
-        {}
-      )
-
-      return Object.values(grouped).map(group => ({
-        ...group,
-        components: group.components as React.ReactNode[]
-      }))
-    } catch (error) {
-      console.error('Error grouping messages:', error)
-      return []
-    }
-  }, [messages])
-
-  const isLastMessageId = useCallback(
-    (id: string) => {
-      if (!messages?.length) return false
-      return id === messages[messages.length - 1].id
-    },
-    [messages]
-  )
-
-  // 렌더링 조건 체크
-  if (!messages?.length || !groupedMessagesArray.length) {
+  if (!messages.length) {
     return null
   }
 
-  return (
-    <div className="flex flex-col space-y-4">
-      {groupedMessagesArray.map((groupedMessage) => {
-        if (!groupedMessage?.id) return null
+  // 메시지 그룹화 로직을 useMemo로 최적화
+  const groupedMessages = useMemo(() => {
+    const grouped = messages.reduce<{ [key: string]: GroupedMessage }>(
+      (acc, message) => {
+        if (!acc[message.id]) {
+          // StreamableValue 생성
+          const isCollapsed = createStreamableValue<boolean>()
+          if (message.isCollapsed !== undefined) {
+            isCollapsed.done(!!message.isCollapsed)
+          }
 
-        return (
-          <CollapsibleMessage
-            key={groupedMessage.id}
-            message={{
-              id: groupedMessage.id,
-              component: (
-                <div className="space-y-4">
-                  {groupedMessage.components.map((component, i) => (
-                    <div
-                      key={`${groupedMessage.id}-${i}`}
-                      className="message-component"
-                    >
-                      {component}
-                    </div>
-                  ))}
-                </div>
-              ),
-              isCollapsed: groupedMessage.isCollapsed
-            }}
-            isLastMessage={isLastMessageId(groupedMessage.id)}
-          />
-        )
-      })}
-    </div>
+          acc[message.id] = {
+            id: message.id,
+            components: [],
+            isCollapsed
+          }
+        }
+        acc[message.id].components.push(message.component)
+        return acc
+      },
+      {}
+    )
+
+    return Object.values(grouped)
+  }, [messages])
+
+  return (
+    <>
+      {groupedMessages.map((groupedMessage) => (
+        <CollapsibleMessage
+          key={`${groupedMessage.id}`}
+          message={{
+            id: groupedMessage.id,
+            component: groupedMessage.components.map((component, i) => (
+              <div key={`${groupedMessage.id}-${i}`}>{component}</div>
+            )),
+            isCollapsed: groupedMessage.isCollapsed
+          }}
+          isLastMessage={groupedMessage.id === messages[messages.length - 1].id}
+        />
+      ))}
+    </>
   )
 }
