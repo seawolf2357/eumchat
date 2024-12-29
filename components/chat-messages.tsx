@@ -4,7 +4,6 @@ import { StreamableValue } from 'ai/rsc'
 import type { UIState } from '@/lib/types'
 import { CollapsibleMessage } from './collapsible-message'
 import { useCallback, useMemo } from 'react'
-import { createStreamableValue } from 'ai/rsc'
 
 interface ChatMessagesProps {
   messages: UIState
@@ -17,25 +16,19 @@ type GroupedMessage = {
 }
 
 export function ChatMessages({ messages }: ChatMessagesProps) {
-  if (!messages.length) {
-    return null
-  }
-
   // 메시지 그룹화 로직을 useMemo로 최적화
   const groupedMessages = useMemo(() => {
+    if (!messages.length) {
+      return []
+    }
+
     const grouped = messages.reduce<{ [key: string]: GroupedMessage }>(
       (acc, message) => {
         if (!acc[message.id]) {
-          // StreamableValue 생성
-          const isCollapsed = createStreamableValue<boolean>()
-          if (message.isCollapsed !== undefined) {
-            isCollapsed.done(!!message.isCollapsed)
-          }
-
           acc[message.id] = {
             id: message.id,
             components: [],
-            isCollapsed
+            isCollapsed: message.isCollapsed
           }
         }
         acc[message.id].components.push(message.component)
@@ -46,6 +39,11 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
 
     return Object.values(grouped)
   }, [messages])
+
+  // 빈 메시지 처리
+  if (!messages.length || !groupedMessages.length) {
+    return null
+  }
 
   return (
     <>
