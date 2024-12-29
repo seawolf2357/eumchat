@@ -9,6 +9,8 @@ import {
   getMutableAIState
 } from 'ai/rsc'
 import { CoreMessage, generateId } from 'ai'
+
+
 import { Section } from '@/components/section'
 import { FollowupPanel } from '@/components/followup-panel'
 import { saveChat } from '@/lib/actions/chat'
@@ -29,12 +31,7 @@ const submit = async (
   formData?: FormData,
   skip?: boolean,
   retryMessages?: AIMessage[]
-): Promise<{
-  id: string
-  isGenerating: StreamableValue<boolean>
-  component: React.ReactNode
-  isCollapsed: StreamableValue<boolean>
-}> => {
+) => {
   const aiState = getMutableAIState<typeof AI>()
   const uiStream = createStreamableUI()
   const isGenerating = createStreamableValue(true)
@@ -42,6 +39,7 @@ const submit = async (
 
   try {
     const aiMessages = [...(retryMessages ?? aiState.get().messages)]
+    // CoreMessage 타입에 맞게 필터링 및 매핑
     const messages: CoreMessage[] = aiMessages
       .filter(
         message =>
@@ -51,9 +49,10 @@ const submit = async (
           message.type !== 'end'
       )
       .map(message => ({
-        role: message.role,
-        content: message.content
-      }))
+        role: message.role === 'tool' ? 'assistant' : message.role,
+        content: message.content,
+        name: message.name
+      } as CoreMessage))
 
     messages.splice(0, Math.max(messages.length - MAX_MESSAGES, 0))
 
@@ -114,13 +113,13 @@ const submit = async (
       component: uiStream.value,
       isCollapsed: isCollapsed.value
     }
+
   } catch (error) {
     console.error('Submit error:', error)
     isGenerating.done(false)
     throw error
   }
 }
-
 export const AI = createAI<AIState, UIState>({
   actions: {
     submit
