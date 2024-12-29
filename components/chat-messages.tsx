@@ -1,7 +1,7 @@
 'use client'
 
 import { StreamableValue } from 'ai/rsc'
-import type { UIState } from '@/app/actions'
+import { UIState } from '@/lib/types' // app/actions 대신 lib/types에서 import
 import { CollapsibleMessage } from './collapsible-message'
 import { useCallback, useMemo } from 'react'
 
@@ -16,6 +16,8 @@ type GroupedMessage = {
 }
 
 export function ChatMessages({ messages }: ChatMessagesProps) {
+
+
   // Hooks를 최상단에 배치
   const groupedMessagesArray = useMemo(() => {
     if (!messages?.length) {
