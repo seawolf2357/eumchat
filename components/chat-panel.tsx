@@ -1,12 +1,30 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
-import { usePathname } from 'next/navigation'
-import { ChatPanel } from './chat-panel'
-import { ChatMessages } from './chat-messages'
-import { useUIState, useAIState } from 'ai/rsc'
-import { EmptyScreen } from './empty-screen'
+import { useEffect, useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import type { AI } from '@/app/actions'
+import { useUIState, useActions, useAIState } from 'ai/rsc'
+import { cn } from '@/lib/utils'
+import { UserMessage } from './user-message'
+import { Button } from './ui/button'
+import { ArrowRight, Plus } from 'lucide-react'
+import { EmptyScreen } from './empty-screen'
+import Textarea from 'react-textarea-autosize'
+import { generateId } from 'ai'
+import { useAppState } from '@/lib/utils/app-state'
+import { ModelSelector } from './model-selector'
+import { models } from '@/lib/types/models'
+import { useLocalStorage } from '@/lib/hooks/use-local-storage'
+import { getDefaultModelId } from '@/lib/utils'
+import { toast } from 'sonner'
+
+interface ChatPanelProps {
+  messages: UIState
+  query?: string
+  onModelChange?: (id: string) => void
+}
+
+export function ChatPanel({ messages, query, onModelChange }: ChatPanelProps) {
 
 type ChatProps = {
   id?: string
