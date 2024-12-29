@@ -122,3 +122,11 @@ export type AIState = {
   chatId: string
   isSharePage?: boolean
 }
+
+
+
+export type AIState = {
+  messages: AIMessage[]
+  chatId: string
+  isSharePage?: boolean
+}
