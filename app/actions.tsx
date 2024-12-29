@@ -23,197 +23,266 @@ import { AnswerSection } from '@/components/answer-section'
 import { workflow } from '@/lib/actions/workflow'
 import { isProviderEnabled } from '@/lib/utils/registry'
 
-interface ChatPanelProps {
-  messages: UIState
-  query?: string
-  onModelChange?: (id: string) => void
+const MAX_MESSAGES = 6
+
+const submit = async (
+  formData?: FormData,
+  skip?: boolean,
+  retryMessages?: AIMessage[]
+): Promise<{
+  id: string
+  isGenerating: StreamableValue<boolean>
+  component: React.ReactNode
+  isCollapsed: StreamableValue<boolean>
+}> => {
+  const aiState = getMutableAIState<typeof AI>()
+  const uiStream = createStreamableUI()
+  const isGenerating = createStreamableValue(true)
+  const isCollapsed = createStreamableValue(false)
+
+  try {
+    const aiMessages = [...(retryMessages ?? aiState.get().messages)]
+    const messages: CoreMessage[] = aiMessages
+      .filter(
+        message =>
+          message.role !== 'tool' &&
+          message.type !== 'followup' &&
+          message.type !== 'related' &&
+          message.type !== 'end'
+      )
+      .map(message => ({
+        role: message.role,
+        content: message.content
+      }))
+
+    messages.splice(0, Math.max(messages.length - MAX_MESSAGES, 0))
+
+    const userInput = skip ? `{"action": "skip"}` : formData?.get('input') as string
+    const content = skip
+      ? userInput
+      : formData
+      ? JSON.stringify(Object.fromEntries(formData))
+      : null
+
+    const type = skip
+      ? undefined
+      : formData?.has('input')
+      ? 'input'
+      : formData?.has('related_query')
+      ? 'input_related'
+      : 'inquiry'
+
+    const model = (formData?.get('model') as string) || 'openai:gpt-4o-mini'
+    const providerId = model.split(':')[0]
+
+    if (!isProviderEnabled(providerId)) {
+      throw new Error(
+        `Provider ${providerId} is not available (API key not configured or base URL not set)`
+      )
+    }
+
+    if (content) {
+      const newMessage: AIMessage = {
+        id: generateId(),
+        role: 'user',
+        content,
+        type
+      }
+
+      aiState.update({
+        ...aiState.get(),
+        messages: [...aiState.get().messages, newMessage]
+      })
+
+      messages.push({
+        role: 'user',
+        content
+      })
+    }
+
+    await workflow(
+      { uiStream, isCollapsed, isGenerating },
+      aiState,
+      messages,
+      skip ?? false,
+      model
+    )
+
+    return {
+      id: generateId(),
+      isGenerating: isGenerating.value,
+      component: uiStream.value,
+      isCollapsed: isCollapsed.value
+    }
+  } catch (error) {
+    console.error('Submit error:', error)
+    isGenerating.done(false)
+    throw error
+  }
 }
 
-export default function ChatPanel({ messages, query, onModelChange }: ChatPanelProps) {
-  const [input, setInput] = useState('')
-  const [showEmptyScreen, setShowEmptyScreen] = useState(false)
-  const [, setMessages] = useUIState<typeof AI>()
-  const [aiMessage, setAIMessage] = useAIState<typeof AI>()
-  const { isGenerating, setIsGenerating } = useAppState()
-  const { submit } = useActions()
-  const router = useRouter()
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const isFirstRender = useRef(true)
-
-  const [selectedModelId, setSelectedModelId] = useLocalStorage<string>(
-    'selectedModel',
-    getDefaultModelId(models)
-  )
-
-  const [isComposing, setIsComposing] = useState(false)
-  const [enterDisabled, setEnterDisabled] = useState(false)
-
-  const handleCompositionStart = () => setIsComposing(true)
-
-  const handleCompositionEnd = () => {
-    setIsComposing(false)
-    setEnterDisabled(true)
-    setTimeout(() => {
-      setEnterDisabled(false)
-    }, 300)
-  }
-
-  async function handleQuerySubmit(query: string, formData?: FormData) {
-    setInput(query)
-    setIsGenerating(true)
-
-    setMessages(currentMessages => [
-      ...currentMessages,
-      {
-        id: generateId(),
-        component: <UserMessage message={query} />
-      }
-    ])
-
-    const data = formData || new FormData()
-    const modelString = selectedModelId
-    data.set('model', modelString)
-
-    if (!formData) {
-      data.set('input', query)
-    }
+export const AI = createAI<AIState, UIState>({
+  actions: {
+    submit
+  },
+  initialUIState: [],
+  initialAIState: {
+    chatId: generateId(),
+    messages: []
+  },
+  onGetUIState: async () => {
+    const aiState = getAIState()
+    return aiState ? getUIStateFromAIState(aiState as Chat) : undefined
+  },
+  onSetAIState: async ({ state }) => {
+    if (!state.messages.some(e => e.type === 'answer')) return
 
     try {
-      const responseMessage = await submit(data)
-      setMessages(currentMessages => [...currentMessages, responseMessage])
+      const chat: Chat = {
+        id: state.chatId,
+        createdAt: new Date(),
+        userId: 'anonymous',
+        path: `/search/${state.chatId}`,
+        title: state.messages.length > 0
+          ? JSON.parse(state.messages[0].content)?.input?.substring(0, 100) || 'Untitled'
+          : 'Untitled',
+        messages: [
+          ...state.messages,
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: 'end',
+            type: 'end'
+          }
+        ]
+      }
+      await saveChat(chat)
     } catch (error) {
-      console.error('Query submission error:', error)
-      toast.error(`Error: ${error}`)
-      handleClear()
+      console.error('Save chat error:', error)
     }
   }
+})
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    await handleQuerySubmit(input, formData)
+export const getUIStateFromAIState = (aiState: Chat): UIState => {
+  const { chatId, isSharePage, messages } = aiState
+  
+  if (!Array.isArray(messages)) return []
+
+  return messages
+    .map((message, index) => {
+      const { role, type } = message
+
+      if (!type || type === 'end' || (isSharePage && ['related', 'followup'].includes(type))) {
+        return null
+      }
+
+      switch (role) {
+        case 'user':
+          return processUserMessage(message, index, chatId, isSharePage ?? false)
+        case 'assistant':
+          return processAssistantMessage(message)
+        case 'tool':
+          return processToolMessage(message)
+        default:
+          return null
+      }
+    })
+    .filter((message): message is NonNullable<typeof message> => message !== null)
+}
+
+function processUserMessage(message: AIMessage, index: number, chatId: string, isSharePage: boolean) {
+  const { type, content, id } = message
+  
+  switch (type) {
+    case 'input':
+    case 'input_related':
+      const json = JSON.parse(content)
+      const value = type === 'input' ? json.input : json.related_query
+      return {
+        id,
+        component: (
+          <UserMessage
+            message={value}
+            chatId={chatId}
+            showShare={index === 0 && !isSharePage}
+          />
+        )
+      }
+    case 'inquiry':
+      return {
+        id,
+        component: <CopilotDisplay content={content} />
+      }
+    default:
+      return null
   }
+}
 
-  useEffect(() => {
-    if (isFirstRender.current && query && query.trim().length > 0) {
-      handleQuerySubmit(query)
-      isFirstRender.current = false
+function processAssistantMessage(message: AIMessage) {
+  const { type, content, id } = message
+  const answer = createStreamableValue()
+  answer.done(content)
+
+  switch (type) {
+    case 'answer':
+      return {
+        id,
+        component: <AnswerSection result={answer.value} />
+      }
+    case 'related':
+      const relatedQueries = createStreamableValue()
+      relatedQueries.done(JSON.parse(content))
+      return {
+        id,
+        component: <SearchRelated relatedQueries={relatedQueries.value} />
+      }
+    case 'followup':
+      return {
+        id,
+        component: (
+          <Section title="Follow-up" className="pb-8">
+            <FollowupPanel />
+          </Section>
+        )
+      }
+    default:
+      return null
+  }
+}
+
+function processToolMessage(message: AIMessage) {
+  try {
+    const { content, id, name } = message
+    const toolOutput = JSON.parse(content)
+    const isCollapsed = createStreamableValue()
+    isCollapsed.done(true)
+    const searchResults = createStreamableValue()
+    searchResults.done(JSON.stringify(toolOutput))
+
+    switch (name) {
+      case 'search':
+        return {
+          id,
+          component: <SearchSection result={searchResults.value} />,
+          isCollapsed: isCollapsed.value
+        }
+      case 'retrieve':
+        return {
+          id,
+          component: <RetrieveSection data={toolOutput} />,
+          isCollapsed: isCollapsed.value
+        }
+      case 'videoSearch':
+        return {
+          id,
+          component: <VideoSearchSection result={searchResults.value} />,
+          isCollapsed: isCollapsed.value
+        }
+      default:
+        return null
     }
-  }, [query])
-
-  useEffect(() => {
-    const lastMessage = aiMessage.messages.slice(-1)[0]
-    if (lastMessage?.type === 'followup' || lastMessage?.type === 'inquiry') {
-      setIsGenerating(false)
-    }
-  }, [aiMessage, setIsGenerating])
-
-  const handleClear = () => {
-    setIsGenerating(false)
-    setMessages([])
-    setAIMessage({ messages: [], chatId: '' })
-    setInput('')
-    router.push('/')
-  }
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  if (messages.length > 0) {
-    return (
-      <div className="fixed bottom-2 md:bottom-8 left-0 right-0 flex justify-center items-center mx-auto pointer-events-none">
-        <Button
-          type="button"
-          variant="secondary"
-          className="rounded-full bg-secondary/80 group transition-all hover:scale-105 pointer-events-auto"
-          onClick={handleClear}
-          disabled={isGenerating}
-        >
-          <span className="text-sm mr-2 group-hover:block hidden animate-in fade-in duration-300">
-            New
-          </span>
-          <Plus size={18} className="group-hover:rotate-90 transition-all" />
-        </Button>
-      </div>
-    )
-  }
-
-  if (query && query.trim().length > 0) {
+  } catch (error) {
+    console.error('Tool message processing error:', error)
     return null
   }
-
-  return (
-    <div className="fixed bottom-8 left-0 right-0 top-10 mx-auto h-screen flex flex-col items-center justify-center">
-      <form onSubmit={handleSubmit} className="max-w-2xl w-full px-6">
-        <div className="relative flex items-center w-full">
-          <ModelSelector
-            selectedModelId={selectedModelId}
-            onModelChange={id => {
-              setSelectedModelId(id)
-              onModelChange?.(id)
-            }}
-          />
-          <Textarea
-            ref={inputRef}
-            name="input"
-            rows={1}
-            maxRows={5}
-            tabIndex={0}
-            onCompositionStart={handleCompositionStart}
-            onCompositionEnd={handleCompositionEnd}
-            placeholder="Ask a question..."
-            spellCheck={false}
-            value={input}
-            className="resize-none w-full min-h-12 rounded-fill bg-muted border border-input pl-4 pr-10 pt-3 pb-1 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            onChange={e => {
-              setInput(e.target.value)
-              setShowEmptyScreen(e.target.value.length === 0)
-            }}
-            onKeyDown={e => {
-              if (
-                e.key === 'Enter' &&
-                !e.shiftKey &&
-                !isComposing &&
-                !enterDisabled
-              ) {
-                if (input.trim().length === 0) {
-                  e.preventDefault()
-                  return
-                }
-                e.preventDefault()
-                const textarea = e.target as HTMLTextAreaElement
-                textarea.form?.requestSubmit()
-              }
-            }}
-            onHeightChange={height => {
-              if (!inputRef.current) return
-              const initialHeight = 70
-              const initialBorder = 32
-              const multiple = (height - initialHeight) / 20
-              const newBorder = initialBorder - 4 * multiple
-              inputRef.current.style.borderRadius = `${Math.max(8, newBorder)}px`
-            }}
-            onFocus={() => setShowEmptyScreen(true)}
-            onBlur={() => setShowEmptyScreen(false)}
-          />
-          <Button
-            type="submit"
-            size="icon"
-            variant="ghost"
-            className="absolute right-2 top-1/2 transform -translate-y-1/2"
-            disabled={input.length === 0}
-          >
-            <ArrowRight size={20} />
-          </Button>
-        </div>
-        <EmptyScreen
-          submitMessage={message => {
-            setInput(message)
-          }}
-          className={cn(showEmptyScreen ? 'visible' : 'invisible')}
-        />
-      </form>
-    </div>
-  )
 }
