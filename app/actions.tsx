@@ -1,23 +1,27 @@
-'use client'
+'use server'
 
-import { useEffect, useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import type { AI } from '@/app/actions'
-import { useUIState, useActions, useAIState } from 'ai/rsc'
-import { cn } from '@/lib/utils'
-import { UserMessage } from './user-message'
-import { Button } from './ui/button'
-import { ArrowRight, Plus } from 'lucide-react'
-import { EmptyScreen } from './empty-screen'
-import Textarea from 'react-textarea-autosize'
-import { generateId } from 'ai'
-import { useAppState } from '@/lib/utils/app-state'
-import { ModelSelector } from './model-selector'
-import { models } from '@/lib/types/models'
-import { useLocalStorage } from '@/lib/hooks/use-local-storage'
-import { getDefaultModelId } from '@/lib/utils'
-import { toast } from 'sonner'
-import type { UIState } from '@/lib/types'
+import {
+  StreamableValue,
+  createAI,
+  createStreamableUI,
+  createStreamableValue,
+  getAIState,
+  getMutableAIState
+} from 'ai/rsc'
+import { CoreMessage, generateId } from 'ai'
+import { Section } from '@/components/section'
+import { FollowupPanel } from '@/components/followup-panel'
+import { saveChat } from '@/lib/actions/chat'
+import { Chat, AIMessage, AIState, UIState } from '@/lib/types'
+import { UserMessage } from '@/components/user-message'
+import { SearchSection } from '@/components/search-section'
+import SearchRelated from '@/components/search-related'
+import { CopilotDisplay } from '@/components/copilot-display'
+import RetrieveSection from '@/components/retrieve-section'
+import { VideoSearchSection } from '@/components/video-search-section'
+import { AnswerSection } from '@/components/answer-section'
+import { workflow } from '@/lib/actions/workflow'
+import { isProviderEnabled } from '@/lib/utils/registry'
 
 interface ChatPanelProps {
   messages: UIState
