@@ -16,18 +16,16 @@ type GroupedMessage = {
 }
 
 export function ChatMessages({ messages }: ChatMessagesProps) {
-  // 메시지 유효성 검사
-  if (!messages?.length) {
-    return null
-  }
-
-  // 메시지 그룹화 로직을 useMemo로 최적화
+  // Hooks를 최상단에 배치
   const groupedMessagesArray = useMemo(() => {
+    if (!messages?.length) {
+      return []
+    }
+
     try {
-      // 메시지 그룹화
       const grouped = messages.reduce<{ [key: string]: GroupedMessage }>(
         (acc, message) => {
-          if (!message?.id) return acc // 유효하지 않은 메시지 건너뛰기
+          if (!message?.id) return acc
 
           if (!acc[message.id]) {
             acc[message.id] = {
@@ -46,7 +44,6 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
         {}
       )
 
-      // 그룹화된 메시지를 배열로 변환
       return Object.values(grouped).map(group => ({
         ...group,
         components: group.components as React.ReactNode[]
@@ -57,21 +54,17 @@ export function ChatMessages({ messages }: ChatMessagesProps) {
     }
   }, [messages])
 
-  // 마지막 메시지 ID 확인 함수
   const isLastMessageId = useCallback(
     (id: string) => {
-      return messages.length > 0 && id === messages[messages.length - 1].id
+      if (!messages?.length) return false
+      return id === messages[messages.length - 1].id
     },
     [messages]
   )
 
-  // 에러 상태 처리
-  if (!groupedMessagesArray.length) {
-    return (
-      <div className="flex items-center justify-center p-4">
-        <p className="text-gray-500">No messages to display</p>
-      </div>
-    )
+  // 렌더링 조건 체크
+  if (!messages?.length || !groupedMessagesArray.length) {
+    return null
   }
 
   return (
