@@ -1,3 +1,5 @@
+// app/actions.tsx
+
 import {
   StreamableValue,
   createAI,
@@ -10,8 +12,7 @@ import { CoreMessage, generateId } from 'ai'
 import { Section } from '@/components/section'
 import { FollowupPanel } from '@/components/followup-panel'
 import { saveChat } from '@/lib/actions/chat'
-import { Chat } from '@/lib/types'
-import { AIMessage } from '@/lib/types'
+import { Chat, AIMessage, AIState, UIState } from '@/lib/types'
 import { UserMessage } from '@/components/user-message'
 import { SearchSection } from '@/components/search-section'
 import SearchRelated from '@/components/search-related'
@@ -37,7 +38,6 @@ async function submit(
   const isCollapsed = createStreamableValue(false)
 
   const aiMessages = [...(retryMessages ?? aiState.get().messages)]
-  // Get the messages from the state, filter out the tool messages
   const messages: CoreMessage[] = aiMessages
     .filter(
       message =>
@@ -51,9 +51,8 @@ async function submit(
       return { role, content } as CoreMessage
     })
 
-  // Limit the number of messages to the maximum
   messages.splice(0, Math.max(messages.length - MAX_MESSAGES, 0))
-  // Get the user input from the form data
+  
   const userInput = skip
     ? `{"action": "skip"}`
     : (formData?.get('input') as string)
@@ -71,18 +70,15 @@ async function submit(
     ? 'input_related'
     : 'inquiry'
 
-  // Get the model from the form data (e.g., openai:gpt-4o-mini)
   const model = (formData?.get('model') as string) || 'openai:gpt-4o-mini'
   const providerId = model.split(':')[0]
-  console.log(`Using model: ${model}`)
-  // Check if provider is enabled
+  
   if (!isProviderEnabled(providerId)) {
     throw new Error(
       `Provider ${providerId} is not available (API key not configured or base URL not set)`
     )
   }
 
-  // Add the user message to the state
   if (content) {
     aiState.update({
       ...aiState.get(),
@@ -102,7 +98,6 @@ async function submit(
     })
   }
 
-  // Run the agent workflow
   workflow(
     { uiStream, isCollapsed, isGenerating },
     aiState,
@@ -119,19 +114,6 @@ async function submit(
   }
 }
 
-export type AIState = {
-  messages: AIMessage[]
-  chatId: string
-  isSharePage?: boolean
-}
-
-export type UIState = {
-  id: string
-  component: React.ReactNode
-  isGenerating?: StreamableValue<boolean>
-  isCollapsed?: StreamableValue<boolean>
-}[]
-
 const initialAIState: AIState = {
   chatId: generateId(),
   messages: []
@@ -139,7 +121,6 @@ const initialAIState: AIState = {
 
 const initialUIState: UIState = []
 
-// AI is a provider you wrap your application with so you can access AI and UI state in your components.
 export const AI = createAI<AIState, UIState>({
   actions: {
     submit
@@ -153,14 +134,12 @@ export const AI = createAI<AIState, UIState>({
     if (aiState) {
       const uiState = getUIStateFromAIState(aiState as Chat)
       return uiState
-    } else {
-      return
     }
+    return
   },
   onSetAIState: async ({ state, done }) => {
     'use server'
 
-    // Check if there is any message of type 'answer' in the state messages
     if (!state.messages.some(e => e.type === 'answer')) {
       return
     }
@@ -174,7 +153,7 @@ export const AI = createAI<AIState, UIState>({
         ? JSON.parse(messages[0].content)?.input?.substring(0, 100) ||
           'Untitled'
         : 'Untitled'
-    // Add an 'end' message at the end to determine if the history needs to be reloaded
+
     const updatedMessages: AIMessage[] = [
       ...messages,
       {
@@ -197,11 +176,10 @@ export const AI = createAI<AIState, UIState>({
   }
 })
 
-export const getUIStateFromAIState = (aiState: Chat) => {
+export const getUIStateFromAIState = (aiState: Chat): UIState => {
   const chatId = aiState.chatId
   const isSharePage = aiState.isSharePage
 
-  // Ensure messages is an array of plain objects
   const messages = Array.isArray(aiState.messages)
     ? aiState.messages.map(msg => ({ ...msg }))
     : []
@@ -241,6 +219,7 @@ export const getUIStateFromAIState = (aiState: Chat) => {
                 component: <CopilotDisplay content={content} />
               }
           }
+          break
         case 'assistant':
           const answer = createStreamableValue()
           answer.done(content)
@@ -269,6 +248,7 @@ export const getUIStateFromAIState = (aiState: Chat) => {
                 )
               }
           }
+          break
         case 'tool':
           try {
             const toolOutput = JSON.parse(content)
@@ -292,9 +272,7 @@ export const getUIStateFromAIState = (aiState: Chat) => {
               case 'videoSearch':
                 return {
                   id,
-                  component: (
-                    <VideoSearchSection result={searchResults.value} />
-                  ),
+                  component: <VideoSearchSection result={searchResults.value} />,
                   isCollapsed: isCollapsed.value
                 }
             }
@@ -304,12 +282,14 @@ export const getUIStateFromAIState = (aiState: Chat) => {
               component: null
             }
           }
+          break
         default:
           return {
             id,
             component: null
           }
       }
+      return null
     })
     .filter(message => message !== null) as UIState
 }
